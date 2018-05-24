@@ -727,4 +727,23 @@ select mid, money, name from store distribute by mid sort by mid;</p>
 </blockquote>
 <p><strong>注意被cluster by指定的列只能是降序，不能指定asc和desc。</strong></p>
 <p><img src="https://i.imgur.com/AWCIeVm.png" alt="enter image description here"></p>
+<h2 id="作业参数">作业参数</h2>
+<ul>
+<li>设置reducetask的字节数</li>
+</ul>
+<blockquote>
+<p>$hive&gt;set hive.exec.reducers.bytes.per.reducer=xxx</p>
+</blockquote>
+<ul>
+<li>设置reduce task的最大任务数</li>
+</ul>
+<blockquote>
+<p>$hive&gt;set hive.exec.reducers.max=0</p>
+</blockquote>
+<ul>
+<li>设置reducetask个数</li>
+</ul>
+<blockquote>
+<p>$hive&gt;set mapreduce.job.reduces=0</p>
+</blockquote>
 
