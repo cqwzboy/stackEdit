@@ -269,4 +269,155 @@ e.printStackTrace();<br>
 <p>}</p>
 </li>
 </ul>
+<h1 id="hive中的表">Hive中的表</h1>
+<h2 id="managed-table">managed table</h2>
+<p><strong>托管表</strong> - 删除表时（Mysql上），数据也一并删除（HDFS上）</p>
+<h2 id="external-table">external table</h2>
+<p><strong>外部表</strong> - 删除表时（Mysql上），数据不被删除（HDFS上）</p>
+<h1 id="hive命令">Hive命令</h1>
+<h2 id="创建表">创建表</h2>
+<pre><code>CREATE [EXTERNAL] TABLE [IF NOT EXISTS] table_name  
+[(col_name data_type [COMMENT col_comment], ...)]  
+[COMMENT table_comment]  
+[PARTITIONED BY (col_name data_type [COMMENT col_comment], ...)]  
+[CLUSTERED BY (col_name, col_name, ...)  
+[SORTED BY (col_name [ASC|DESC], ...)] INTO num_buckets BUCKETS]  
+[ROW FORMAT row_format]  
+[STORED AS file_format]  
+[LOCATION hdfs_path]
+</code></pre>
+<ul>
+<li>
+<p><strong>PARTITIONED BY</strong>给表格指定分区，分区的要素可以有多个</p>
+</li>
+<li>
+<p><strong>CREATE TABLE</strong> 创建一个指定名字的表。如果相同名字的表已经存在，则抛出异常；用户可以用 IF NOT EXIST 选项来忽略这个异常</p>
+</li>
+<li>
+<p><strong>EXTERNAL</strong> 关键字可以让用户创建一个外部表，在建表的同时指定一个指向实际数据的路径（LOCATION）</p>
+</li>
+<li>
+<p><strong>LIKE</strong> 允许用户复制现有的表结构，但是不复制数据</p>
+</li>
+<li>
+<p><strong>COMMENT</strong>可以为表与字段增加描述</p>
+</li>
+<li>
+<p><strong>ROW FORMAT</strong><br>
+DELIMITED<br>
+[FIELDS TERMINATED BY char]<br>
+[COLLECTION ITEMS TERMINATED BY char]<br>
+[MAP KEYS TERMINATED BY char]<br>
+[LINES TERMINATED BY char]<br>
+| SERDE serde_name<br>
+[WITH SERDEPROPERTIES (property_name=property_value, property_name=property_value, …)]</p>
+</li>
+</ul>
+<p>用户在建表的时候可以自定义 SerDe 或者使用自带的 SerDe。如果没有指定 ROW FORMAT 或者 ROW FORMAT DELIMITED，将会使用自带的 SerDe。在建表的时候，用户还需要为表指定列，用户在指定表的列的同时也会指定自定义的 SerDe，Hive 通过 SerDe 确定表的具体的列的数据。</p>
+<ul>
+<li>
+<p><strong>STORED AS</strong></p>
+<p>SEQUENCEFILE<br>
+| TEXTFILE<br>
+| RCFILE<br>
+| INPUTFORMAT input_format_classname OUTPUTFORMAT output_format_classname</p>
+</li>
+</ul>
+<p>如果文件数据是纯文本，可以使用 STORED AS TEXTFILE。如果数据需要压缩，使用 STORED AS SEQUENCE 。</p>
+<p>举例：</p>
+<pre><code>CREATE external TABLE IF NOT EXISTS t2(
+id int,
+name string,
+age int
+) COMMENT 'xx' 
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' 
+STORED AS TEXTFILE;
+</code></pre>
+<h3 id="坑">坑</h3>
+<p>Hive的Mysql驱动使用的是mysql-connector-java-5.1.17.jar，但是服务器的Mysql版本是5.6.40，当我在hive命令窗口执行"hive&gt;create database mydb2;"时报错：</p>
+<blockquote>
+<p>FAILED: Execution Error, return code 1 from<br>
+org.apache.hadoop.hive.ql.exec.DDLTask. MetaException(message:You have<br>
+an error in your SQL syntax; check the manual that corresponds to your<br>
+MySQL server version for the right syntax to use near ‘OPTION<br>
+SQL_SELECT_LIMIT=DEFAULT’ at line 1)</p>
+</blockquote>
+<p>于是到mysql客户端执行</p>
+<pre><code>nysql&gt;SET OPTION SQL_SELECT_LIMIT=DEFAULT
+</code></pre>
+<p>报错</p>
+<blockquote>
+<p>ERROR 1064 (42000): You have an error in your SQL syntax; check the<br>
+manual that corresponds to your MySQL server version for the right<br>
+syntax to use near ‘OPTION SQL_SELECT_LIMIT=DEFAULT’ at line 1</p>
+</blockquote>
+<p>终于找到问题所在了，原来是因为低版本的mysql-connector-java-5.1.17.jar在创建数据库的时候发送测试语句<code>SET OPTION SQL_SELECT_LIMIT=DEFAULT</code>，上面可以看到mysql5.6的版本已经不在支持该语句，所以会报错，<br>
+<strong>解决办法就是将connector版本升级到与MysqlServer一致的版本</strong>。</p>
+<h2 id="load-data">load data</h2>
+<p>虽然Hive已经提供了类sql的 insert语句支持插入数据，但是这种只支持单条插入的语句不能满足大多数生产情况，<strong>load data</strong>命令可以实现导入一个事先格式化好的文件，从而实现批量导入，这种做法有两个好处：</p>
+<ul>
+<li>批导入提升了效率</li>
+<li>节省了HDFS中NameNode的管理开销</li>
+</ul>
+<h3 id="导入本地文件">导入本地文件</h3>
+<p>加载服务器本地的文件</p>
+<pre><code>load data local inpath '&lt;local_path&gt;' [overwrite] into table &lt;table_name&gt;;
+</code></pre>
+<p><strong>[overwrite]</strong>：覆盖原有数据，可选<br>
+举例：</p>
+<pre><code>load data local inpath '/root/test3.txt' into table t2;
+</code></pre>
+<h3 id="导入hdfs中的文件">导入HDFS中的文件</h3>
+<pre><code>load data inpath '&lt;local_path&gt;' [overwrite] into table &lt;table_name&gt;;
+</code></pre>
+<h3 id="java代码演示">Java代码演示</h3>
+<pre><code>/** 
+ * LoadData测试 
+ * * /
+ public static void main(String[] args){  
+    Connection connection = null;  
+    PreparedStatement pstat = null;  
+  
+	 try{  
+	        Class.forName("org.apache.hive.jdbc.HiveDriver");  
+			connection = DriverManager.getConnection("jdbc:hive2://itaojin101:10000/test");  
+			  pstat = connection.prepareStatement("load data local inpath '/root/test5.txt' into table t2");  
+			  pstat.execute();  
+			  System.out.println("--success--");  
+	  }catch(Exception ex){  
+	        ex.printStackTrace();  
+	  }finally {  
+	        if(connection != null){  
+	            try {  
+	                connection.close();  
+				  } catch (SQLException e) {  
+				                e.printStackTrace();  
+				  }  
+			  }  
+			  
+		if(pstat != null){  
+			try {  
+			    pstat.close();  
+			} catch (SQLException e) {  
+			    e.printStackTrace();  
+			}  
+	    }  
+	  }  
+}
+</code></pre>
+<h2 id="复制表">复制表</h2>
+<h3 id="全表复制">全表复制</h3>
+<p>在mysql中复制一张表的表结构以及数据：</p>
+<pre><code>mysql&gt;create table &lt;table_name1&gt; as select * from &lt;table_name2&gt;;
+</code></pre>
+<p>在Hive中也一样</p>
+<pre><code>hive&gt;create table &lt;table_name1&gt; as select * from &lt;table_name2&gt;;
+</code></pre>
+<h3 id="只复制表结构">只复制表结构</h3>
+<p>mysql：</p>
+<pre><code>mysql&gt;create table &lt;table_name1&gt; like &lt;table_name2&gt;;
+</code></pre>
+<p>Hive:</p>
+<pre><code>hive&gt;create table &lt;table_name1&gt; like &lt;table_name2&gt;;
+</code></pre>
 
