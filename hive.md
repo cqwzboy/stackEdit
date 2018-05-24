@@ -592,4 +592,139 @@ ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' ;
 <p>alter table t3 drop if exists partition (year=2018, month=4);</p>
 </blockquote>
 <p><strong>执行完毕后，不仅分区信息被删除，分区下的数据也全部被删除。原因就是该表是managed table类型的表。</strong></p>
+<h2 id="桶表">桶表</h2>
+<ul>
+<li>
+<p>定义：简单的理解，根据某个字段的值Hash后，将数据分成多个bucket存储。</p>
+</li>
+<li>
+<p>与分区表的区别：<strong>在HDFS层面，分区表是按照文件夹区分存储位置，桶表则是在同一文件夹下，按照不同编号的文件区分存储位置</strong>。</p>
+</li>
+<li>
+<p>创建：</p>
+</li>
+</ul>
+<blockquote>
+<p>CREATE TABLE t4(<br>
+id int, 	<br>
+name string, 	<br>
+age int 	<br>
+)<br>
+CLUSTERED BY (id) 	INTO 3 BUCKETS<br>
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ‘,’ ;</p>
+</blockquote>
+<p>指定分桶的字段是 <strong>id</strong>，桶数为 <strong>3</strong></p>
+<ul>
+<li>载入数据
+<ol>
+<li><strong>load data</strong> 命令将对桶表失效</li>
+<li>采用 <strong>insert</strong> 命令载入其他表的数据
+<blockquote>
+<p>insert into t4 select id,name,age from t3;</p>
+</blockquote>
+</li>
+<li>查看HDFS文件目录
+<blockquote>
+<p>$hive&gt;dfs -lsr /;</p>
+</blockquote>
+</li>
+</ol>
+</li>
+</ul>
+<p><img src="https://i.imgur.com/RbFU4bC.png" alt="enter image description here"><br>
+一共有3个桶，编号分别为：<strong>000000_0</strong>，<strong>000001_0</strong>，<strong>000002_0</strong>。<br>
+再次执行插入语句，且查看HDFS目录：<br>
+<img src="https://i.imgur.com/06tW6Ap.png" alt="enter image description here"></p>
+<ul>
+<li>
+<p>桶数的选择<br>
+<img src="https://i.imgur.com/lOgO7uH.png" alt="enter image description here"><br>
+<strong>总结： 桶数太多太少都不好，有一个粗算规则：先评估表的数量级，再除以hdfs的block的大小的2倍，商值就是桶数。</strong></p>
+</li>
+<li>
+<p>桶表的优点：根据分桶字段查询极快。</p>
+</li>
+</ul>
+<h2 id="导入导出-数据">导入/导出 数据</h2>
+<h3 id="导出数据">导出数据</h3>
+<blockquote>
+<p>export table &lt;table_name&gt; to ‘&lt;path_&gt;’;</p>
+<ul>
+<li>&lt;table_name&gt;: 表名</li>
+<li>&lt;path_&gt;: 导出的HDFS路径</li>
+</ul>
+</blockquote>
+<p>举例：</p>
+<blockquote>
+<p>export table t3 to ‘/root/t3.txt’;</p>
+</blockquote>
+<p>使用以下命令查看hdfs目录：</p>
+<blockquote>
+<p>$hive&gt;dfs -lsr /;</p>
+</blockquote>
+<p><img src="https://i.imgur.com/lJSdzBb.png" alt="enter image description here"></p>
+<p>一共导出了两部分数据：</p>
+<blockquote>
+<ul>
+<li>_metadata：表结构数据</li>
+<li>test.txt：文件</li>
+</ul>
+</blockquote>
+<h3 id="导入数据">导入数据</h3>
+<h2 id="排序">排序</h2>
+<h3 id="order-by">order by</h3>
+<p>Hive中的order by跟传统的sql语言中的order by作用是一样的，会对查询的结果做一次全局排序，所以说，只有hive的sql中制定了order by所有的数据都会到同一个reducer进行处理（不管有多少map，也不管文件有多少的block只会启动一个reducer）。但是对于大量数据这将会消耗很长的时间去执行。</p>
+<p>这里跟传统的sql还有一点区别：如果指定了hive.mapred.mode=strict（默认值是nonstrict）,这时就必须指定limit来限制输出条数，原因是：所有的数据都会在同一个reducer端进行，数据量大的情况下可能不能出结果，那么在这样的严格模式下，必须指定输出的条数。</p>
+<h3 id="sort-by">sort by</h3>
+<p>Hive中指定了sort by，那么在每个reducer端都会做排序，也就是说保证了局部有序（每个reducer出来的数据是有序的，但是不能保证所有的数据是有序的，除非只有一个reducer），好处是：执行了局部排序之后可以为接下去的全局排序提高不少的效率（其实就是做一次归并排序就可以做到全局排序了）。</p>
+<h3 id="distribute-by和sort-by一起使用">distribute by和sort by一起使用</h3>
+<p>ditribute by是控制map的输出在reducer是如何划分的，举个例子，我们有一张表，mid是指这个store所属的商户，money是这个商户的盈利，name是这个store的名字</p>
+
+<table>
+<thead>
+<tr>
+<th>mid</th>
+<th>money</th>
+<th>name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AA</td>
+<td>15.0</td>
+<td>商店1</td>
+</tr>
+<tr>
+<td>AA</td>
+<td>20.0</td>
+<td>商店2</td>
+</tr>
+<tr>
+<td>BB</td>
+<td>22.0</td>
+<td>商店3</td>
+</tr>
+<tr>
+<td>CC</td>
+<td>44.0</td>
+<td>商店4</td>
+</tr>
+</tbody>
+</table><blockquote>
+<p>select mid, money, name from store distribute by mid sort by mid asc, money asc;</p>
+</blockquote>
+<p>我们所有的mid相同的数据会被送到同一个reducer去处理，这就是因为指定了distribute by mid，这样的话就可以统计出每个商户中各个商店盈利的排序了（这个肯定是全局有序的，因为相同的商户会放到同一个reducer去处理）。这里需要注意的是distribute by必须要写在sort by之前。</p>
+<h3 id="cluster-by">cluster by</h3>
+<p>cluster by的功能就是distribute by和sort by相结合，如下2个语句是等价的：</p>
+<blockquote>
+<p>select mid, money, name from store cluster by mid;<br>
+等价于<br>
+select mid, money, name from store distribute by mid sort by mid;</p>
+</blockquote>
+<p>如果需要获得与上面的语句一样的效果：</p>
+<blockquote>
+<p>select mid, money, name from store cluster by mid sort by money;</p>
+</blockquote>
+<p><strong>注意被cluster by指定的列只能是降序，不能指定asc和desc。</strong></p>
+<p><img src="https://i.imgur.com/AWCIeVm.png" alt="enter image description here"></p>
 
