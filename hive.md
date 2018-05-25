@@ -210,6 +210,10 @@ select * from t;
 或者
 hiveserver2 $
 </code></pre>
+<p>后台启动：</p>
+<blockquote>
+<p>nohup hive --service hiveserver2 &amp;</p>
+</blockquote>
 <p>即可后台启动<strong>hiveserver2</strong>进程<br>
 jps可以看到有一个<strong>RunJar</strong>进程，这就是hiveserver2</p>
 <h2 id="beeline">beeline</h2>
