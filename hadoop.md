@@ -573,7 +573,7 @@ zkServer.sh start
 </li>
 <li>
 <p>在itaojin101，itaojin102，itaojin103上分别执行：</p>
-<p><a href="http://hadoop-daemons.sh">hadoop-daemons.sh</a> start journalnode</p>
+<p><a href="http://hadoop-daemon.sh">hadoop-daemon.sh</a> start journalnode</p>
 </li>
 </ul>
 <p>使用jps验证是否启动成功</p>
