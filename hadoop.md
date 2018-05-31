@@ -807,6 +807,15 @@ YARN总体上仍然是master/slave结构，在整个资源管理框架中，reso
 	  &lt;name&gt;yarn.resourcemanager.hostname.rm2&lt;/name&gt;
 	  &lt;value&gt;itaojin102&lt;/value&gt;
 	&lt;/property&gt;
+	&lt;!--RM的applications manager(ASM)端口--&gt;
+	&lt;property&gt;
+	  &lt;name&gt;yarn.resourcemanager.address.rm1&lt;/name&gt;
+	  &lt;value&gt;itaojin101:8032&lt;/value&gt;
+	&lt;/property&gt;
+	&lt;property&gt;
+	  &lt;name&gt;yarn.resourcemanager.address.rm2&lt;/name&gt;
+	  &lt;value&gt;itaojin102:8032&lt;/value&gt;
+	&lt;/property&gt;
 	&lt;!--指定shuffle--&gt;
 	&lt;property&gt;
 		&lt;name&gt;yarn.nodemanager.aux-services&lt;/name&gt;
