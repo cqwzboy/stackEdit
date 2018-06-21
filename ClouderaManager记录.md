@@ -183,4 +183,261 @@ ERROR : Job Submission failed with exception 'org.apache.hadoop.security.AccessC
 <p>hdfs dfs -chmod -R 777 /user</p>
 </blockquote>
 <p>这样做不好的地方就是改变了HDFS文件目录的权限，目前还不知道有没有后遗症，但是解决权限问题。</p>
+<h3 id="安装hive的一个坑">安装Hive的一个坑</h3>
+<p>当ClouderaManager第一次安装Hive是好使的，如果将Hive删除后重新安装，会出现一些问题：<strong>Hive使用的是内置的derby数据库，即便在创建Hive时指定了外部MySQL数据库</strong>，直接影响到注入sqoop从关系型数据导数据到Hive的成功性，这究竟是为什么呢？</p>
+<p>还得先从ClouderaManager环境下Hive的安装目录说起。Hive的安装目录在外部提供的parcels包里，具体位置是：<code>/opt/cloudera/parcels/CDH-5.15.0-1.cdh5.15.0.p0.21/lib/hive</code>，这里将外部parcels放到了 <code>/opt/cloudea</code>文件夹下，根据自己环境的实际安装路径而定。<br>
+<img src="https://i.imgur.com/AHvXf1o.png" alt="enter image description here"></p>
+<p>从图中可以看到，hive安装目录下的<code>conf</code>是引用了 <code>/etc/hive/conf</code> 的软连接（<em>软连接相关知识百度下，大概意思就是创建一个对某个文件夹的引用，并指向另一个虚拟文件夹，物理文件夹的变动实时反映到虚拟文件夹</em>），我们直接到该目录下一探究竟。<br>
+<img src="https://i.imgur.com/c7VYDaa.png" alt="enter image description here"><br>
+原来<code>/etc/hive/conf</code>又是同目录下<code>conf.cloudera.hive</code>目录的软连接。其实，刚开始的模样并非如此，这也是这个坑的出处。</p>
+<p>当安装好ClouderaManager后，在 <code>/etc/hive</code> 只存在一个软连接文件夹 <code>conf</code>，并且指向 <code>/etc/alternatives/hive-conf</code>，</p>
+<p><img src="https://i.imgur.com/iu6H99n.png" alt="enter image description here"><br>
+<code>/etc/alternatives/hive-conf</code>目录下的内容是：<br>
+<img src="https://i.imgur.com/22gbGm5.png" alt="enter image description here"><br>
+查看 <code>hive-site.xml</code> 文件：</p>
+<pre><code>&lt;property&gt;
+  &lt;name&gt;javax.jdo.option.ConnectionURL&lt;/name&gt;
+  &lt;value&gt;jdbc:derby:;databaseName=/var/lib/hive/metastore/metastore_db;create=true&lt;/value&gt;
+  &lt;description&gt;JDBC connect string for a JDBC metastore&lt;/description&gt;
+&lt;/property&gt;
+
+&lt;property&gt;
+  &lt;name&gt;javax.jdo.option.ConnectionDriverName&lt;/name&gt;
+  &lt;value&gt;org.apache.derby.jdbc.EmbeddedDriver&lt;/value&gt;
+  &lt;description&gt;Driver class name for a JDBC metastore&lt;/description&gt;
+&lt;/property&gt;
+</code></pre>
+<p>该配置文件只定义了Hive的内置derby数据库，这也是Hive在ClouderaManager环境下的初始配置。</p>
+<p>当第一次安装并启动Hive时，<code>/etc/hive/</code>目录下会产生一个文件夹 <code>conf.cloudera.hive</code>，该文件夹推测是ClouderaManager结合当前环境整合的一个Hive配置集合，进入目录：<br>
+<img src="https://i.imgur.com/Y3XQ2QD.png" alt="enter image description here"><br>
+可以看到，新产生的目录下存放着hadoop的一些配置文件和一个<code>hive-site.xml</code>文件，查看<code>hive-site.xml</code>：</p>
+<pre><code>&lt;configuration&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.metastore.uris&lt;/name&gt;
+    &lt;value&gt;thrift://node5:9083&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.metastore.client.socket.timeout&lt;/name&gt;
+    &lt;value&gt;300&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.metastore.warehouse.dir&lt;/name&gt;
+    &lt;value&gt;/user/hive/warehouse&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.warehouse.subdir.inherit.perms&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.auto.convert.join&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.auto.convert.join.noconditionaltask.size&lt;/name&gt;
+    &lt;value&gt;20971520&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.optimize.bucketmapjoin.sortedmerge&lt;/name&gt;
+    &lt;value&gt;false&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.smbjoin.cache.rows&lt;/name&gt;
+    &lt;value&gt;10000&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.server2.logging.operation.enabled&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.server2.logging.operation.log.location&lt;/name&gt;
+    &lt;value&gt;/var/log/hive/operation_logs&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;mapred.reduce.tasks&lt;/name&gt;
+    &lt;value&gt;-1&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.exec.reducers.bytes.per.reducer&lt;/name&gt;
+    &lt;value&gt;67108864&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.exec.copyfile.maxsize&lt;/name&gt;
+    &lt;value&gt;33554432&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.exec.reducers.max&lt;/name&gt;
+    &lt;value&gt;1099&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.vectorized.groupby.checkinterval&lt;/name&gt;
+    &lt;value&gt;4096&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.vectorized.groupby.flush.percent&lt;/name&gt;
+    &lt;value&gt;0.1&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.compute.query.using.stats&lt;/name&gt;
+    &lt;value&gt;false&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.vectorized.execution.enabled&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.vectorized.execution.reduce.enabled&lt;/name&gt;
+    &lt;value&gt;false&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.merge.mapfiles&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.merge.mapredfiles&lt;/name&gt;
+    &lt;value&gt;false&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.cbo.enable&lt;/name&gt;
+    &lt;value&gt;false&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.fetch.task.conversion&lt;/name&gt;
+    &lt;value&gt;minimal&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.fetch.task.conversion.threshold&lt;/name&gt;
+    &lt;value&gt;268435456&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.limit.pushdown.memory.usage&lt;/name&gt;
+    &lt;value&gt;0.1&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.merge.sparkfiles&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.merge.smallfiles.avgsize&lt;/name&gt;
+    &lt;value&gt;16777216&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.merge.size.per.task&lt;/name&gt;
+    &lt;value&gt;268435456&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.optimize.reducededuplication&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.optimize.reducededuplication.min.reducer&lt;/name&gt;
+    &lt;value&gt;4&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.map.aggr&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.map.aggr.hash.percentmemory&lt;/name&gt;
+    &lt;value&gt;0.5&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.optimize.sort.dynamic.partition&lt;/name&gt;
+    &lt;value&gt;false&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.execution.engine&lt;/name&gt;
+    &lt;value&gt;mr&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;spark.executor.memory&lt;/name&gt;
+    &lt;value&gt;3039297536&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;spark.driver.memory&lt;/name&gt;
+    &lt;value&gt;966367641&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;spark.executor.cores&lt;/name&gt;
+    &lt;value&gt;4&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;spark.yarn.driver.memoryOverhead&lt;/name&gt;
+    &lt;value&gt;102&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;spark.yarn.executor.memoryOverhead&lt;/name&gt;
+    &lt;value&gt;511&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;spark.dynamicAllocation.enabled&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;spark.dynamicAllocation.initialExecutors&lt;/name&gt;
+    &lt;value&gt;1&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;spark.dynamicAllocation.minExecutors&lt;/name&gt;
+    &lt;value&gt;1&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;spark.dynamicAllocation.maxExecutors&lt;/name&gt;
+    &lt;value&gt;2147483647&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.metastore.execute.setugi&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.support.concurrency&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.zookeeper.quorum&lt;/name&gt;
+    &lt;value&gt;node2,node6,node5&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.zookeeper.client.port&lt;/name&gt;
+    &lt;value&gt;2181&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.zookeeper.namespace&lt;/name&gt;
+    &lt;value&gt;hive_zookeeper_namespace_hive&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.cluster.delegation.token.store.class&lt;/name&gt;
+    &lt;value&gt;org.apache.hadoop.hive.thrift.MemoryTokenStore&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.server2.enable.doAs&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;hive.server2.use.SSL&lt;/name&gt;
+    &lt;value&gt;false&lt;/value&gt;
+  &lt;/property&gt;
+  &lt;property&gt;
+    &lt;name&gt;spark.shuffle.service.enabled&lt;/name&gt;
+    &lt;value&gt;true&lt;/value&gt;
+  &lt;/property&gt;
+&lt;/configuration&gt;
+</code></pre>
+<p>ClouderaManager已经为我们生成了一份Hive配置文件，并且 <code>/etc/hive/conf</code> 目录的软连接指向已经变成了这个新增的目录 <code>/etc/hive/conf.cloudera.hive</code>，显而易见，Hive已经将配置文件路径指向了新生成的目录下。当我们自己搭建源生Hive环境时，以上配置也可以作为有力参考。配置中着重要注意第一个配置<code>hive.metastore.uris</code>，此配置是指定元数据服务器路径。</p>
+<p>讲了这么多，以上内容只是内容铺垫，下面正式进入主题。</p>
+<p>当把已经装好的Hive服务从ClouderaManager平台移除，且重新安装时，问题就来了，<code>/etc/hive/conf</code>软连接地址又指回了初始值 <code>/etc/alternatives/hive-conf</code>，使得Hive服务从内置数据库derby寻找数据源，从而报找不到数据库的错误，其本质就是找不到元数据服务了，所以解决办法就是手动创建软连接，重新指向同目录下的<code>conf.cloudera.hive</code>目录：</p>
+<blockquote>
+<p>cd /etc/hive/conf;</p>
+</blockquote>
+<blockquote>
+<p>rm -rf conf;</p>
+</blockquote>
+<blockquote>
+<p>ln -s conf.cloudera.hive conf;</p>
+</blockquote>
+<p>重启Hive服务即可。</p>
+<p>找不到数据库报错会影响以下两方面流程：</p>
+<ul>
+<li>不能从外部直接导数据到Hive，例如sqoop</li>
+<li>当Hive和HBase存在关联表时，也不能从外部导数据到HBase</li>
+</ul>
 
