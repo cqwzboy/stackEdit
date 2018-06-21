@@ -97,7 +97,7 @@
 <h2 id="注意">注意</h2>
 <h3 id="mysql驱动jar">MySQL驱动jar</h3>
 <p>这个问题已经在前面讲过，不再赘述。</p>
-<h3 id="mysql中user表默认记录导致的一个错误">MySQL中user表默认记录导致的一个错误</h3>
+<h3 id="mysql中user表中的默认记录导致的一个错误">MySQL中user表中的默认记录导致的一个错误</h3>
 <ul>
 <li>
 <p>业务场景：ClouderaManager安装Hive时需要一个MySQL数据库存放元数据，于是创建hive库和hive用户，并且授权，操作命令如下：</p>
@@ -135,7 +135,7 @@
 </li>
 </ul>
 <h3 id="权限问题">权限问题</h3>
-<p>CDH根目录下的<code>/user</code>目录权限是用户<code>hdfs</code>所有，hive客户端在HDFS中对应的用户是<code>anonymous</code>，如果使用hive客户端插入数据，会报权限不足的问题：</p>
+<p>ClouderaManager安装HDFS后会在操作系统里创建一个hdfs用户，且HDFS文件系统中的根目录拥有者也是hdfs，例如根目录下的<code>/user</code>目录权限是用户<code>hdfs</code>所有，hive客户端在HDFS中对应的用户是<code>anonymous</code>，如果使用hive客户端插入数据，会报权限不足的问题：</p>
 <pre><code>0: jdbc:hive2://localhost:10000&gt; insert into student values (1, 'zhangsan', 23);
 INFO  : Compiling command(queryId=hive_20180620114040_16eb72bd-3d66-46a5-802a-695a5d4963b3): insert into student values (1, 'zhangsan', 23)
 INFO  : Semantic Analysis Completed
@@ -184,7 +184,7 @@ ERROR : Job Submission failed with exception 'org.apache.hadoop.security.AccessC
 </blockquote>
 <p>这样做不好的地方就是改变了HDFS文件目录的权限，目前还不知道有没有后遗症，但是解决权限问题。</p>
 <h3 id="安装hive的一个坑">安装Hive的一个坑</h3>
-<p>当ClouderaManager第一次安装Hive是好使的，如果将Hive删除后重新安装，会出现一些问题：<strong>Hive使用的是内置的derby数据库，即便在创建Hive时指定了外部MySQL数据库</strong>，直接影响到注入sqoop从关系型数据导数据到Hive的成功性，这究竟是为什么呢？</p>
+<p>当ClouderaManager第一次安装Hive是好使的，如果将Hive删除后重新安装，会出现一些问题：<strong>Hive会使用内置的derby数据库，即便在创建Hive时指定了外部MySQL数据库</strong>，直接影响到注入sqoop从关系型数据导数据到Hive的成功性，这究竟是为什么呢？</p>
 <p>还得先从ClouderaManager环境下Hive的安装目录说起。Hive的安装目录在外部提供的parcels包里，具体位置是：<code>/opt/cloudera/parcels/CDH-5.15.0-1.cdh5.15.0.p0.21/lib/hive</code>，这里将外部parcels放到了 <code>/opt/cloudea</code>文件夹下，根据自己环境的实际安装路径而定。<br>
 <img src="https://i.imgur.com/AHvXf1o.png" alt="enter image description here"></p>
 <p>从图中可以看到，hive安装目录下的<code>conf</code>是引用了 <code>/etc/hive/conf</code> 的软连接（<em>软连接相关知识百度下，大概意思就是创建一个对某个文件夹的引用，并指向另一个虚拟文件夹，物理文件夹的变动实时反映到虚拟文件夹</em>），我们直接到该目录下一探究竟。<br>
